@@ -40,12 +40,6 @@ uint32_t IO_Manager::process_read_stripe (uint32_t request_id, uint32_t file_id,
     // The chunk exists, so set the node_id
     node_id = chunk_to_node[cur_chunk];
 
-    // If the node isn't up, switch to the replica
-    if (!is_node_up (node_id)) {
-      assert (chunk_replica_exists (cur_chunk));
-      node_id = chunk_to_replica_node[cur_chunk];
-    }
-   
     // Determine how much data to read from the current chunk
     if (count - bytes_read > chunk_size - chunk_offset) {
       read_size = chunk_size - chunk_offset;
@@ -64,19 +58,12 @@ uint32_t IO_Manager::process_read_stripe (uint32_t request_id, uint32_t file_id,
                                       read_size);
     
     printf ("\t\treceived %d from network call.\n", chunk_result);
-    // If the node cannot be read from
-    if (chunk_result == NODE_FAILURE) {
-      // Mark the node as "down"
-      set_node_down (node_id);
-    }
     // The read suceeded, so move on
-    else {
-      // update counters
-      chunk_offset = 0;
-      bytes_read += read_size;
-      chunk_id++;
-      num_chunks++;
-    }
+    // update counters
+    chunk_offset = 0;
+    bytes_read += read_size;
+    chunk_id++;
+    num_chunks++;
   }
   return num_chunks;
 }
@@ -90,7 +77,7 @@ void IO_Manager::process_write_stripe (uint32_t request_id,
                                        uint32_t chunk_size, const void *buf,
                                        int offset, size_t count) {
   uint32_t chunk_id, bytes_written = 0, write_size = 0;
-  int chunk_offset, node_id, replica_node_id, write_result;
+  int chunk_offset, node_id, write_result;
 
   assert (((int)count - offset) <= (int)stripe_size);
   printf ("\n(BARISTA) Process Write Stripe\n");
@@ -107,18 +94,8 @@ void IO_Manager::process_write_stripe (uint32_t request_id,
       chunk_to_node[cur_chunk] = node_id;
     }
 
-    // If the replica does not exist, create it
-    if (!chunk_replica_exists (cur_chunk)) {
-      replica_node_id = put_replica (file_id, pathname, stripe_id,
-                                     chunk_id);
-      printf ("\tchunk replica doesn't exist. Preparing to send chunk replica to node %d\n", 
-                 replica_node_id);
-      chunk_to_replica_node[cur_chunk] = replica_node_id;
-    }
-
-    // Ensure that we have the proper node and replica id's to send data to
+    // Ensure that we have the proper node id's to send data to
     node_id = chunk_to_node[cur_chunk];
-    replica_node_id = chunk_to_replica_node[cur_chunk];
 
     // Determine the size of the write
     if (count - bytes_written > chunk_size - chunk_offset) {
@@ -141,20 +118,6 @@ void IO_Manager::process_write_stripe (uint32_t request_id,
       dirty_chunks.insert(make_pair(node_id, cur_chunk));
     }
 
-    if (is_node_up(replica_node_id)) {
-      // Send
-      printf ("\tprocessing chunk replica %d (sending to node %d)\n", chunk_id, 
-                 replica_node_id);
-      write_result = process_write_chunk (replica_request_id, 0, file_id, replica_node_id, stripe_id,
-                                          chunk_id, chunk_offset, (uint8_t *)buf
-                                          + bytes_written, write_size);
-      (*replica_chunks_written)++;
-    }
-    else {
-      printf("\tqueueing write of chunk %d to node %d which is DOWN\n", chunk_id, replica_node_id);
-      dirty_chunks.insert(make_pair(node_id, cur_chunk));
-    }
-
     // TODO fail if both are down
     // update counters
     chunk_offset = 0;
@@ -174,15 +137,6 @@ uint32_t IO_Manager::process_delete_file (uint32_t request_id, uint32_t file_id)
       if (is_node_up (chunk_node)) {
         process_delete_chunk (request_id, file_id, chunk_node, (*it).stripe_id, (*it).chunk_num);
         chunk_to_node.erase (*it);
-        num_chunks++;
-      }
-    }
-    if (chunk_replica_exists (*it)) {
-      int chunk_node = get_replica_node_id (file_id, (*it).stripe_id,
-                                            (*it).chunk_num);
-      if (is_node_up (chunk_node)) {
-        process_delete_chunk (request_id, file_id, chunk_node, (*it).stripe_id, (*it).chunk_num);
-        chunk_to_replica_node.erase (*it);
         num_chunks++;
       }
     }
