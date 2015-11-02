@@ -134,6 +134,7 @@ void IO_Manager::process_write_stripe (uint32_t request_id,
       write_result = process_write_chunk (request_id, 0, file_id, node_id, stripe_id,
                                           chunk_id, chunk_offset, (uint8_t *)buf
                                           + bytes_written, write_size);
+      (*chunks_written)++;
     } else {
     }
 
@@ -144,6 +145,7 @@ void IO_Manager::process_write_stripe (uint32_t request_id,
       write_result = process_write_chunk (replica_request_id, 0, file_id, replica_node_id, stripe_id,
                                           chunk_id, chunk_offset, (uint8_t *)buf
                                           + bytes_written, write_size);
+      (*replica_chunks_written)++;
     } else {
     }
 
@@ -152,8 +154,6 @@ void IO_Manager::process_write_stripe (uint32_t request_id,
     chunk_offset = 0;
     bytes_written += write_size;
     chunk_id++;
-    (*chunks_written)++;
-    (*replica_chunks_written)++;
   }
 }
 
