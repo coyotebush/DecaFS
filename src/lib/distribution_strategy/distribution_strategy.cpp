@@ -15,8 +15,5 @@ extern "C" int put_chunk (uint32_t file_id, char *pathname, uint32_t stripe_id,
   printf ("\t(BARISTA) Put chunk.\n");
   printf ("\t\tnode %d\n", node_num);
 
-  if (is_node_up (node_num)) {
-    return node_num;
-  }
-  return (node_num == FIRST) ? SECOND : FIRST; 
+  return node_num;
 }

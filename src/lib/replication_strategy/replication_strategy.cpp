@@ -16,9 +16,6 @@ extern "C" int put_replica (uint32_t file_id, char *pathname,
   printf ("\t\tnode %d\n", node_num);
 
   
-  if (is_node_up (node_num)) {
-    return node_num;
-  }
-  return (node_num == FIRST_REPLICA) ? SECOND_REPLICA : FIRST_REPLICA; 
+  return node_num;
 }
 
