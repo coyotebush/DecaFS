@@ -372,11 +372,6 @@ void check_write_complete (uint32_t request_id) {
   
   printf ("(BARISTA) Check write complete\n");
 
-  if (active_write_requests[request].info.chunks_expected == 0) {
-    printf ("\tall stripes have not been sent yet, write not complete.\n");
-    return;
-  }
-
   if (active_write_requests[request].info.chunks_expected ==
       active_write_requests[request].info.chunks_received &&
       active_write_requests[request].replica_info.chunks_expected ==
