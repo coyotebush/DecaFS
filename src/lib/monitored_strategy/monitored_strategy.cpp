@@ -22,5 +22,6 @@ extern "C" void node_failure_handler_func (uint32_t node_number) {
 extern "C" void node_up_handler_func (uint32_t node_number) {
   printf ("Handling node coming online...\n");
   // Add custom processing to be done when node node_number goes up.
+  flush_chunks(node_number);
 }
 

@@ -60,6 +60,10 @@ extern "C" uint32_t process_delete_file (uint32_t request_id, uint32_t file_id) 
   return io_manager.process_delete_file (request_id, file_id);
 }
 
+extern "C" void flush_chunks(int node_id) {
+  io_manager.flush_chunks(node_id);
+}
+
 extern "C" char * process_file_storage_stat (struct decafs_file_stat file_info) {
   return io_manager.process_file_storage_stat (file_info);
 }

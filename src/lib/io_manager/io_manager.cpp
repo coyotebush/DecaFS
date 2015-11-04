@@ -135,7 +135,11 @@ void IO_Manager::process_write_stripe (uint32_t request_id,
                                           chunk_id, chunk_offset, (uint8_t *)buf
                                           + bytes_written, write_size);
       (*chunks_written)++;
-    } else {
+    }
+    else {
+      printf("\tqueueing write of chunk %d to node %d which is DOWN\n", chunk_id, node_id);
+      deleted_chunks[node_id].erase(cur_chunk);
+      dirty_chunks[node_id].insert(cur_chunk);
     }
 
     if (is_node_up(replica_node_id)) {
@@ -146,7 +150,11 @@ void IO_Manager::process_write_stripe (uint32_t request_id,
                                           chunk_id, chunk_offset, (uint8_t *)buf
                                           + bytes_written, write_size);
       (*replica_chunks_written)++;
-    } else {
+    }
+    else {
+      printf("\tqueueing write of chunk %d to node %d which is DOWN\n", chunk_id, replica_node_id);
+      deleted_chunks[replica_node_id].erase(cur_chunk);
+      dirty_chunks[replica_node_id].insert(cur_chunk);
     }
 
     // TODO fail if both are down
@@ -170,6 +178,10 @@ uint32_t IO_Manager::process_delete_file (uint32_t request_id, uint32_t file_id)
         chunk_to_node.erase (*it);
         num_chunks++;
       }
+      else {
+        dirty_chunks[chunk_node].erase(*it);
+        deleted_chunks[chunk_node].insert(*it);
+      }
     }
     if (chunk_replica_exists (*it)) {
       int chunk_node = get_replica_node_id (file_id, (*it).stripe_id,
@@ -179,9 +191,17 @@ uint32_t IO_Manager::process_delete_file (uint32_t request_id, uint32_t file_id)
         chunk_to_replica_node.erase (*it);
         num_chunks++;
       }
+      else {
+        dirty_chunks[chunk_node].erase(*it);
+        deleted_chunks[chunk_node].insert(*it);
+      }
     }
   }
   return num_chunks;
+}
+
+void IO_Manager::flush_chunks(int node_id) {
+  //
 }
     
 char * IO_Manager::process_file_storage_stat (struct decafs_file_stat file_info) {

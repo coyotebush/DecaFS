@@ -49,6 +49,8 @@ extern "C" void process_write_stripe (uint32_t request_id, uint32_t replica_requ
  */
 extern "C" uint32_t process_delete_file (uint32_t request_id, uint32_t file_id);
 
+extern "C" void flush_chunks(int node_id);
+
 /*
  * Get information about the storage locations of chunks within a file.
  */
