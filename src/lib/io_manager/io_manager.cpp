@@ -201,7 +201,54 @@ uint32_t IO_Manager::process_delete_file (uint32_t request_id, uint32_t file_id)
 }
 
 void IO_Manager::flush_chunks(int node_id) {
-  //
+  for (std::set<struct file_chunk>::iterator it = deleted_chunks[node_id].begin();
+       it != deleted_chunks[node_id].end(); it++) {
+    int recovery_node_id = chunk_to_node[*it];
+    if (recovery_node_id == node_id) {
+      recovery_node_id = chunk_to_replica_node[*it];
+    }
+    uint32_t request_id = get_new_request_id();
+    process_delete_chunk(request_id, it->file_id, recovery_node_id,
+                         it->stripe_id, it->chunk_num);
+    ignorable_request_ids.insert(request_id);
+  }
+  deleted_chunks.erase(node_id);
+
+  for (std::set<struct file_chunk>::iterator it = dirty_chunks[node_id].begin();
+       it != dirty_chunks[node_id].end(); it++) {
+    int recovery_node_id = chunk_to_node[*it];
+    if (recovery_node_id == node_id) {
+      recovery_node_id = chunk_to_replica_node[*it];
+    }
+    uint32_t request_id = get_new_request_id();
+    process_read_chunk(request_id, 0, it->file_id, recovery_node_id,
+                       it->stripe_id, it->chunk_num, 0, nullptr,
+                       get_chunk_size() /*TODO*/);
+    read_request_ids.insert(make_pair(request_id, make_pair(node_id, *it)));
+  }
+  dirty_chunks.erase(node_id);
+}
+
+bool IO_Manager::read_response_handler(ReadChunkResponse *read_response) {
+  auto it = read_request_ids.find(read_response->id);
+  if (it == read_request_ids.end()) {
+    return false;
+  }
+  process_write_chunk(read_response->id, 0, it->second.second.file_id,
+                      it->second.first, it->second.second.stripe_id,
+                      it->second.second.chunk_num, 0,
+                      read_response->data_buffer, read_response->count);
+  read_request_ids.erase(read_response->id);
+  ignorable_request_ids.insert(read_response->id);
+  return true;
+}
+
+bool IO_Manager::write_response_handler(WriteChunkResponse *write_response) {
+  return ignorable_request_ids.erase(write_response->id);
+}
+
+bool IO_Manager::delete_response_handler(DeleteChunkResponse *delete_response) {
+  return ignorable_request_ids.erase(delete_response->id);
 }
     
 char * IO_Manager::process_file_storage_stat (struct decafs_file_stat file_info) {

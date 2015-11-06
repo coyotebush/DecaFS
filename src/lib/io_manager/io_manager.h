@@ -36,6 +36,8 @@ class IO_Manager {
     PersistentMap<struct file_chunk, int> chunk_to_replica_node;
     PersistentMap<int, set<struct file_chunk> > dirty_chunks;
     PersistentMap<int, set<struct file_chunk> > deleted_chunks;
+    set<uint32_t> ignorable_request_ids;
+    map<uint32_t, pair<int, struct file_chunk> > read_request_ids;
 
     //map<struct file_chunk, int> chunk_to_node;
     //map<struct file_chunk, int> chunk_to_replica_node;
@@ -95,11 +97,6 @@ class IO_Manager {
                                int offset, size_t count);
     
 
-    /**
-     * Update all deleted/dirty chunks for a node coming online.
-     */
-    void flush_chunks(int node_id);
-
     /*
      *   Delete all chunks and replicas for a given file.
      *
@@ -107,6 +104,15 @@ class IO_Manager {
      */
     uint32_t process_delete_file (uint32_t request_id, uint32_t file_id);
     
+    /**
+     * Update all deleted/dirty chunks for a node coming online.
+     */
+    void flush_chunks(int node_id);
+
+    bool read_response_handler(ReadChunkResponse *read_response);
+    bool write_response_handler(WriteChunkResponse *write_response);
+    bool delete_response_handler(DeleteChunkResponse *delete_response);
+
     /*
      * Get information about the storage locations of chunks within a file.
      */

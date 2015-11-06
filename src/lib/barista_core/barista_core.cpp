@@ -629,6 +629,9 @@ extern "C" void read_file (int fd, size_t count, struct client client) {
 }
 
 extern "C" void read_response_handler (ReadChunkResponse *read_response) {
+  if (io_manager.read_response_handler(read_response)) {
+    return;
+  }
   assert (read_request_exists (read_response->id));
   
   struct file_chunk chunk = {read_response->file_id, read_response->stripe_id,
@@ -741,6 +744,9 @@ extern "C" void write_file (int fd, const void *buf, size_t count, struct client
 }
 
 extern "C" void write_response_handler (WriteChunkResponse *write_response) {
+  if (io_manager.write_response_handler(write_response)) {
+    return;
+  }
   assert (write_request_exists (write_response->id));
 
   struct write_request request = write_request_lookups[write_response->id];
@@ -809,6 +815,9 @@ extern "C" void delete_file (char *pathname, struct client client) {
 }
 
 extern "C" void delete_response_handler (DeleteChunkResponse *delete_response) {
+  if (io_manager.delete_response_handler(delete_response)) {
+    return;
+  }
   assert (delete_request_exists (delete_response->id));
   
   active_delete_requests[delete_response->id].chunks_received++;
