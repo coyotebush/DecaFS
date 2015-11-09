@@ -201,14 +201,13 @@ uint32_t IO_Manager::process_delete_file (uint32_t request_id, uint32_t file_id)
 }
 
 void IO_Manager::flush_chunks(int node_id) {
+  printf("flushing chunks for node %d\n", node_id);
   for (std::set<struct file_chunk>::iterator it = deleted_chunks[node_id].begin();
        it != deleted_chunks[node_id].end(); it++) {
-    int recovery_node_id = chunk_to_node[*it];
-    if (recovery_node_id == node_id) {
-      recovery_node_id = chunk_to_replica_node[*it];
-    }
+    printf("  deleting chunk %d,%d,%d from node %d\n",
+           it->file_id, it->stripe_id, it->chunk_num, node_id);
     uint32_t request_id = get_new_request_id();
-    process_delete_chunk(request_id, it->file_id, recovery_node_id,
+    process_delete_chunk(request_id, it->file_id, node_id,
                          it->stripe_id, it->chunk_num);
     ignorable_request_ids.insert(request_id);
   }
@@ -220,10 +219,12 @@ void IO_Manager::flush_chunks(int node_id) {
     if (recovery_node_id == node_id) {
       recovery_node_id = chunk_to_replica_node[*it];
     }
+    printf("  starting to copy chunk %d,%d,%d from node %d to node %d\n",
+           it->file_id, it->stripe_id, it->chunk_num, recovery_node_id, node_id);
     uint32_t request_id = get_new_request_id();
     process_read_chunk(request_id, 0, it->file_id, recovery_node_id,
                        it->stripe_id, it->chunk_num, 0, nullptr,
-                       get_chunk_size() /*TODO*/);
+                       get_chunk_size());
     read_request_ids.insert(make_pair(request_id, make_pair(node_id, *it)));
   }
   dirty_chunks.erase(node_id);
@@ -234,6 +235,9 @@ bool IO_Manager::read_response_handler(ReadChunkResponse *read_response) {
   if (it == read_request_ids.end()) {
     return false;
   }
+  printf("  received chunk %d,%d,%d and sending to node %d\n",
+         it->second.second.file_id, it->second.second.stripe_id,
+         it->second.second.chunk_num, it->second.first);
   process_write_chunk(read_response->id, 0, it->second.second.file_id,
                       it->second.first, it->second.second.stripe_id,
                       it->second.second.chunk_num, 0,
