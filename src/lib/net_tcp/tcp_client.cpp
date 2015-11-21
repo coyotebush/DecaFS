@@ -98,6 +98,7 @@ void TcpClient::run() {
     //printf("TcpClient: %s spinning\n", m_name.c_str());
 
     // TODO implement scanning for messages from server
+    FD_ZERO(&tmp_set);
     FD_SET(m_socket_number, &tmp_set);
     safe_select(m_socket_number+1, &tmp_set);
 
