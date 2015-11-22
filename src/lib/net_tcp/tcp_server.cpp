@@ -1,6 +1,8 @@
 #include "tcp_server.h"
 
-inline void safe_select(uint32_t socket, fd_set* fds) {
+volatile sig_atomic_t shutdown_signal = 0;
+
+inline int safe_select(uint32_t socket, fd_set* fds) {
  
   timeval time;
   time.tv_sec = 0;
@@ -8,9 +10,15 @@ inline void safe_select(uint32_t socket, fd_set* fds) {
  
   if (select(socket, fds, NULL, NULL, &time) < 0) {
     perror("select");
+    return -1;
     // TODO what to do here
     //exit(-1);
   }
+  return 0;
+}
+
+void set_shutdown_signal(int signal) {
+  shutdown_signal = 1;
 }
 
 TcpServer::TcpServer(unsigned short port) :
@@ -21,10 +29,11 @@ TcpServer::TcpServer(unsigned short port) :
 
   FD_ZERO(&m_server_set);
   FD_SET(m_socket_number, &m_server_set);
+
 }
 
 TcpServer::~TcpServer() {
-
+  close();
 }
 
 void TcpServer::close() {
@@ -103,7 +112,8 @@ void TcpServer::run() {
 
   m_listening = true;
 
-  while (m_listening && m_open) {
+  while (m_listening && m_open && !shutdown_signal) {
+    std::signal(SIGINT, set_shutdown_signal);
 
     //printf("TcpServer: spinning\n");
     check_for_clients(); // new connections
@@ -112,6 +122,10 @@ void TcpServer::run() {
 
   serverStopped();
   m_listening = false;
+
+  if (shutdown_signal) {
+    close();
+  }
 }
 
 void TcpServer::check_for_clients() {
@@ -120,9 +134,8 @@ void TcpServer::check_for_clients() {
 
   // Check if the Server has any new clients
   memcpy(&tmp_set, &m_server_set, sizeof(fd_set));
-  safe_select(m_highest_socket+1, &tmp_set);
-
-  if (FD_ISSET(m_socket_number, &tmp_set)) {
+  if (safe_select(m_highest_socket+1, &tmp_set) == 0
+      && FD_ISSET(m_socket_number, &tmp_set)) {
     // add a client
     ConnectionToClient* client = new ConnectionToClient();
     client->socket_len = sizeof(struct sockaddr_in);
@@ -156,7 +169,9 @@ void TcpServer::check_for_messages() {
   uint32_t buf;
 
   memcpy(&tmp_set, &m_client_set, sizeof(fd_set));
-  safe_select(m_highest_socket+1, &tmp_set);
+  if (safe_select(m_highest_socket+1, &tmp_set)) {
+    return;
+  }
 
   for (it = m_clients.begin(); it != m_clients.end(); ++it) {
 

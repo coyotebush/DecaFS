@@ -10,6 +10,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <map>
+#include <csignal>
 
 #include "connection_to_client.h"
 
