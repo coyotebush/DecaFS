@@ -112,7 +112,7 @@ struct file_chunk {
       return left.file_id < right.file_id;
     }
     if (left.stripe_id != right.stripe_id) {
-      return left.file_id < right.stripe_id;
+      return left.stripe_id < right.stripe_id;
     }
     return left.chunk_num < right.chunk_num;
   }
