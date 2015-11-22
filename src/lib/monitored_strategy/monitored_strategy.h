@@ -6,6 +6,7 @@
 #include "decafs_types/file_types.h"
 #include "decafs_types/ip_address.h"
 #include "io_manager/io_manager_c_api.h"
+#include "volatile_metadata/volatile_metadata_c_api.h"
 
 /*
  * Called during DecaFS statup process. This function needs to initiate all
