@@ -354,6 +354,7 @@ void check_read_complete (uint32_t request_id) {
         active_read_requests[request_id].response_packets;
     std::map<struct file_chunk, struct read_buffer*>::iterator it = packet_map.begin();
     while (it != packet_map.end()) {
+      printf("\tAdding buffer of %d bytes for %d,%d,%d\n", it->second->size, it->first.file_id, it->first.stripe_id, it->first.chunk_num);
       struct read_buffer *cur_packet = it->second;
       memcpy (buffer_offset, cur_packet->buf, cur_packet->size);
       buffer_offset += cur_packet->size;
@@ -367,6 +368,11 @@ void check_read_complete (uint32_t request_id) {
       printf ("\tRead result could not reach client.\n");
     }
     active_read_requests.erase (request_id);
+  }
+  else {
+    printf ("\t%d/%d chunks received\n",
+             active_read_requests[request_id].info.chunks_received,
+             active_read_requests[request_id].info.chunks_expected);
   }
 }
 
@@ -637,6 +643,7 @@ extern "C" void read_response_handler (ReadChunkResponse *read_response) {
   struct file_chunk chunk = {read_response->file_id, read_response->stripe_id,
                              read_response->chunk_num};
   
+  printf("\tgot chunk %d,%d,%d\n", chunk.file_id, chunk.stripe_id, chunk.chunk_num);
   active_read_requests[read_response->id].info.chunks_received++;
   active_read_requests[read_response->id].response_packets[chunk] =
       new read_buffer (read_response->count, read_response->data_buffer);
