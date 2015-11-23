@@ -34,8 +34,7 @@ class IO_Manager {
     // Variables
     PersistentMap<struct file_chunk, int> chunk_to_node;
     PersistentMap<struct file_chunk, int> chunk_to_replica_node;
-    map<int, set<struct file_chunk> > dirty_chunks;
-    map<int, set<struct file_chunk> > deleted_chunks;
+    multimap<int, struct file_chunk> dirty_chunks;
     set<uint32_t> ignorable_request_ids;
     map<uint32_t, pair<int, struct file_chunk> > read_request_ids;
 

@@ -138,8 +138,7 @@ void IO_Manager::process_write_stripe (uint32_t request_id,
     }
     else {
       printf("\tqueueing write of chunk %d to node %d which is DOWN\n", chunk_id, node_id);
-      deleted_chunks[node_id].erase(cur_chunk);
-      dirty_chunks[node_id].insert(cur_chunk);
+      dirty_chunks.insert(make_pair(node_id, cur_chunk));
     }
 
     if (is_node_up(replica_node_id)) {
@@ -153,8 +152,7 @@ void IO_Manager::process_write_stripe (uint32_t request_id,
     }
     else {
       printf("\tqueueing write of chunk %d to node %d which is DOWN\n", chunk_id, replica_node_id);
-      deleted_chunks[replica_node_id].erase(cur_chunk);
-      dirty_chunks[replica_node_id].insert(cur_chunk);
+      dirty_chunks.insert(make_pair(node_id, cur_chunk));
     }
 
     // TODO fail if both are down
@@ -178,10 +176,6 @@ uint32_t IO_Manager::process_delete_file (uint32_t request_id, uint32_t file_id)
         chunk_to_node.erase (*it);
         num_chunks++;
       }
-      else {
-        dirty_chunks[chunk_node].erase(*it);
-        deleted_chunks[chunk_node].insert(*it);
-      }
     }
     if (chunk_replica_exists (*it)) {
       int chunk_node = get_replica_node_id (file_id, (*it).stripe_id,
@@ -191,10 +185,6 @@ uint32_t IO_Manager::process_delete_file (uint32_t request_id, uint32_t file_id)
         chunk_to_replica_node.erase (*it);
         num_chunks++;
       }
-      else {
-        dirty_chunks[chunk_node].erase(*it);
-        deleted_chunks[chunk_node].insert(*it);
-      }
     }
   }
   return num_chunks;
@@ -202,30 +192,21 @@ uint32_t IO_Manager::process_delete_file (uint32_t request_id, uint32_t file_id)
 
 void IO_Manager::flush_chunks(int node_id) {
   printf("flushing chunks for node %d\n", node_id);
-  for (std::set<struct file_chunk>::iterator it = deleted_chunks[node_id].begin();
-       it != deleted_chunks[node_id].end(); it++) {
-    printf("  deleting chunk %d,%d,%d from node %d\n",
-           it->file_id, it->stripe_id, it->chunk_num, node_id);
-    uint32_t request_id = get_new_request_id();
-    process_delete_chunk(request_id, it->file_id, node_id,
-                         it->stripe_id, it->chunk_num);
-    ignorable_request_ids.insert(request_id);
-  }
-  deleted_chunks.erase(node_id);
 
-  for (std::set<struct file_chunk>::iterator it = dirty_chunks[node_id].begin();
-       it != dirty_chunks[node_id].end(); it++) {
-    int recovery_node_id = chunk_to_node[*it];
+  auto range = dirty_chunks.equal_range(node_id);
+  for (auto it = range.first; it != range.second; it++) {
+    struct file_chunk chunk = it->second;
+    int recovery_node_id = chunk_to_node[chunk];
     if (recovery_node_id == node_id) {
-      recovery_node_id = chunk_to_replica_node[*it];
+      recovery_node_id = chunk_to_replica_node[chunk];
     }
     printf("  starting to copy chunk %d,%d,%d from node %d to node %d\n",
-           it->file_id, it->stripe_id, it->chunk_num, recovery_node_id, node_id);
+           chunk.file_id, chunk.stripe_id, chunk.chunk_num, recovery_node_id, node_id);
     uint32_t request_id = get_new_request_id();
-    process_read_chunk(request_id, 0, it->file_id, recovery_node_id,
-                       it->stripe_id, it->chunk_num, 0, nullptr,
+    process_read_chunk(request_id, 0, chunk.file_id, recovery_node_id,
+                       chunk.stripe_id, chunk.chunk_num, 0, nullptr,
                        get_chunk_size());
-    read_request_ids.insert(make_pair(request_id, make_pair(node_id, *it)));
+    read_request_ids.insert(make_pair(request_id, make_pair(node_id, chunk)));
   }
   dirty_chunks.erase(node_id);
 }
