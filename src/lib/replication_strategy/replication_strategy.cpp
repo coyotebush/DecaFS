@@ -2,20 +2,7 @@
 
 extern "C" int put_replica (uint32_t file_id, char *pathname,
                             uint32_t stripe_id, uint32_t chunk_num) {
-  int node_num;
-  struct ip_address ip;
-
-  if (chunk_num%2 == 1) {
-    node_num = FIRST_REPLICA;  
-  }
-  else {
-    node_num = SECOND_REPLICA;
-  }
- 
-  printf ("\t(BARISTA) Put replica.\n");
-  printf ("\t\tnode %d\n", node_num);
-
-  
-  return node_num;
+  // TODO RAID 5?
+  return PARITY_NODE;
 }
 
