@@ -167,6 +167,9 @@ extern "C" void read_file (int fd, size_t count, struct client client);
  */
 extern "C" void read_response_handler (ReadChunkResponse *read_response);
 
+extern "C" void read_chunk_handler(uint32_t request_id, struct file_chunk chunk,
+                                   struct read_buffer *buffer);
+
 /*
  * TODO 
  */

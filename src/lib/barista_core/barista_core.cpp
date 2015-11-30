@@ -638,17 +638,22 @@ extern "C" void read_response_handler (ReadChunkResponse *read_response) {
   if (io_manager.read_response_handler(read_response)) {
     return;
   }
-  assert (read_request_exists (read_response->id));
-  
+
   struct file_chunk chunk = {read_response->file_id, read_response->stripe_id,
                              read_response->chunk_num};
-  
+  read_chunk_handler(read_response->id, chunk,
+      new read_buffer (read_response->count, read_response->data_buffer));
+}
+
+extern "C" void read_chunk_handler(uint32_t request_id, struct file_chunk chunk,
+                                   struct read_buffer *buffer) {
+  assert (read_request_exists (request_id));
   printf("\tgot chunk %d,%d,%d\n", chunk.file_id, chunk.stripe_id, chunk.chunk_num);
-  active_read_requests[read_response->id].info.chunks_received++;
-  active_read_requests[read_response->id].response_packets[chunk] =
-      new read_buffer (read_response->count, read_response->data_buffer);
-  
-  check_read_complete(read_response->id);
+
+  active_read_requests[request_id].info.chunks_received++;
+  active_read_requests[request_id].response_packets[chunk] = buffer;
+
+  check_read_complete(request_id);
 }
 
 extern "C" void make_dir(const char* pathname, mode_t mode, struct client client) {

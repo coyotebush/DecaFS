@@ -31,12 +31,27 @@ using namespace std;
 
 class IO_Manager {
   private:
+    struct ChunkViking {
+      bool write_to_parity;
+      struct file_chunk parity_chunk;
+      struct file_chunk client_chunk;
+      uint32_t client_request_id;
+      int node_count;
+      int offset;
+      vector<uint8_t> buffer;
+
+      ChunkViking(uint32_t r, struct file_chunk cc, int nc, const vector<uint8_t> &b)
+        : write_to_parity(false), client_chunk(cc), client_request_id(r),
+          node_count(nc), buffer(b) {}
+    };
+
     // Variables
     PersistentMap<struct file_chunk, int> chunk_to_node;
     PersistentMap<struct file_chunk, int> chunk_to_replica_node;
     multimap<int, struct file_chunk> dirty_chunks;
     set<uint32_t> ignorable_request_ids;
     map<uint32_t, pair<int, struct file_chunk> > read_request_ids;
+    map<uint32_t, ChunkViking> chunk_changes;
 
     //map<struct file_chunk, int> chunk_to_node;
     //map<struct file_chunk, int> chunk_to_replica_node;
