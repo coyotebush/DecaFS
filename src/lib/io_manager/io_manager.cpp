@@ -60,23 +60,36 @@ uint32_t IO_Manager::process_read_stripe (uint32_t request_id, uint32_t file_id,
       printf ("\t\treceived %d from network call.\n", chunk_result);
     }
     else {
+      // RAID invariants:
+      // - For all chunks, node_id == chunk_num.
+      // - Parity chunk is guaranteed to exist if any chunk in the stripe does.
+      // - chunk_to_node maps every primary chunk to its node, and does not map
+      //   parity chunks.
+      // - chunk_to_replica_node maps every primary chunk to the node storing
+      //   its parity chunk.
+
       printf("RAID reconstructing chunk %d,%d,%d since node %d is DOWN\n",
              file_id, stripe_id, chunk_id, node_id);
       uint32_t raid_request_id = get_new_request_id();
-      for (int raid_node_id = 1; raid_node_id <= get_num_espressos();
-           raid_node_id++) {
-        // TODO handle missing chunks
-        if (raid_node_id != node_id) {
-          chunk_result = process_read_chunk(raid_request_id, 0, file_id, node_id,
-                                            stripe_id, raid_node_id,
-                                            chunk_offset, nullptr, read_size);
+      int parity_node_id = chunk_to_replica_node[cur_chunk];
+
+      int read_count = 0;
+      struct file_chunk raid_chunk = cur_chunk;
+      for (raid_chunk.chunk_num = 1; raid_chunk.chunk_num <= get_num_espressos();
+           raid_chunk.chunk_num++) {
+        if (raid_chunk != cur_chunk && (chunk_exists(raid_chunk) ||
+                                        raid_chunk.chunk_num == parity_node_id)) {
+          chunk_result = process_read_chunk(raid_request_id, 0,
+              file_id, raid_chunk.chunk_num, stripe_id, raid_chunk.chunk_num,
+              chunk_offset, nullptr, read_size);
           printf("\tRAID reading chunk %d,%d,%d from node %d got %d\n",
-                 file_id, stripe_id, raid_node_id, raid_node_id, chunk_result);
+                 file_id, stripe_id, raid_chunk.chunk_num,
+                 raid_chunk.chunk_num, chunk_result);
+          read_count++;
         }
       }
-      struct file_chunk missing_chunk = {file_id, stripe_id, chunk_id};
       chunk_changes.insert(make_pair(raid_request_id,
-          ChunkViking(request_id, missing_chunk, get_num_espressos() - 1,
+          ChunkViking(request_id, cur_chunk, read_count,
                       vector<uint8_t>(read_size, 0))));
     }
     // The read suceeded, so move on
@@ -98,7 +111,7 @@ void IO_Manager::process_write_stripe (uint32_t request_id,
                                        uint32_t chunk_size, const void *buf,
                                        int offset, size_t count) {
   uint32_t chunk_id, bytes_written = 0, write_size = 0;
-  int chunk_offset, node_id, write_result;
+  int chunk_offset, node_id, chunk_result;
 
   assert (((int)count - offset) <= (int)stripe_size);
   printf ("\n(BARISTA) Process Write Stripe\n");
@@ -117,6 +130,9 @@ void IO_Manager::process_write_stripe (uint32_t request_id,
 
     // Ensure that we have the proper node id's to send data to
     node_id = chunk_to_node[cur_chunk];
+    int parity_node_id = chunk_to_replica_node[cur_chunk];
+    uint32_t raid_request_id = get_new_request_id();
+    int read_count = 0;
 
     // Determine the size of the write
     if (count - bytes_written > chunk_size - chunk_offset) {
@@ -127,51 +143,66 @@ void IO_Manager::process_write_stripe (uint32_t request_id,
     }
 
     if (is_node_up(node_id)) {
-      // TODO
       printf("RAID sending chunk %d,%d,%d to node %d\n",
              file_id, stripe_id, chunk_id, node_id);
 
-      /* chunk_changes.insert(make_pair(raid_request_id, */
-      /*     ChunkViking(request_id, missing_chunk, get_num_espressos() - 1, */
-      /*                 vector<uint8_t>(read_size, 0)))); */
+      // Read chunk
+      chunk_result = process_read_chunk(raid_request_id, 0, file_id,
+                                        node_id, stripe_id,
+                                        chunk_id, chunk_offset,
+                                        nullptr, write_size);
+      printf("\tRAID reading original chunk %d,%d,%d from node %d got %d\n",
+             file_id, stripe_id, chunk_id,
+             node_id, chunk_result);
+      read_count++;
 
-      // Send
+      // Read parity
+      chunk_result = process_read_chunk(raid_request_id, 0, file_id,
+                                        parity_node_id, stripe_id,
+                                        parity_node_id, chunk_offset,
+                                        nullptr, write_size);
+      printf("\tRAID reading parity chunk %d,%d,%d from node %d got %d\n",
+             file_id, stripe_id, parity_node_id,
+             parity_node_id, chunk_result);
+      read_count++;
+
+      // Write chunk
       printf ("\tprocessing chunk %d (sending to node %d)\n", chunk_id, node_id);
-      write_result = process_write_chunk (request_id, 0, file_id, node_id, stripe_id,
+      chunk_result = process_write_chunk (request_id, 0, file_id, node_id, stripe_id,
                                           chunk_id, chunk_offset, (uint8_t *)buf
                                           + bytes_written, write_size);
-      (*chunks_written)++;
     }
     else {
-      // TODO
-      printf("RAID updating rest of stripe for chunk %d,%d,%d since node %d is DOWN\n",
+      printf("RAID updating stripe parity for chunk %d,%d,%d since node %d is DOWN\n",
              file_id, stripe_id, chunk_id, node_id);
-      uint32_t raid_request_id = get_new_request_id();
-      int parity_node_id = put_replica(file_id, pathname, stripe_id, chunk_id);
-      for (int raid_node_id = 1; raid_node_id <= get_num_espressos();
-           raid_node_id++) {
-        if (raid_node_id != node_id && raid_node_id != parity_node_id) {
-          int chunk_result = process_read_chunk(raid_request_id, 0, file_id, node_id,
-                                                stripe_id, raid_node_id,
-                                                chunk_offset, nullptr, write_size);
+
+      struct file_chunk raid_chunk = cur_chunk;
+      for (raid_chunk.chunk_num = 1; raid_chunk.chunk_num <= get_num_espressos();
+           raid_chunk.chunk_num++) {
+        if (raid_chunk != cur_chunk && chunk_exists(raid_chunk)) {
+          chunk_result = process_read_chunk(raid_request_id, 0,
+              file_id, raid_chunk.chunk_num, stripe_id, raid_chunk.chunk_num,
+              chunk_offset, nullptr, write_size);
           printf("\tRAID reading chunk %d,%d,%d from node %d got %d\n",
-                 file_id, stripe_id, raid_node_id, raid_node_id, chunk_result);
+                 file_id, stripe_id, raid_chunk.chunk_num,
+                 raid_chunk.chunk_num, chunk_result);
+          read_count++;
         }
       }
-      struct file_chunk missing_chunk = {file_id, stripe_id, chunk_id};
-      struct file_chunk parity_chunk = {file_id, stripe_id, get_num_espressos()};
-      chunk_changes.insert(make_pair(raid_request_id,
-          ChunkViking(request_id, parity_chunk, missing_chunk, get_num_espressos() - 2,
-                      chunk_offset,
-                      vector<uint8_t>((uint8_t *)buf + bytes_written,
-                                      (uint8_t *)buf + bytes_written + write_size))));
 
       printf("\tqueueing write of chunk %d to node %d which is DOWN\n", chunk_id, node_id);
       dirty_chunks.insert(make_pair(node_id, cur_chunk));
     }
 
-    // TODO fail if both are down
+    struct file_chunk parity_chunk = {file_id, stripe_id, parity_node_id};
+    chunk_changes.insert(make_pair(raid_request_id,
+        ChunkViking(request_id, parity_chunk, cur_chunk, read_count,
+                    chunk_offset,
+                    vector<uint8_t>((uint8_t *)buf + bytes_written,
+                                    (uint8_t *)buf + bytes_written + write_size))));
+
     // update counters
+    (*chunks_written)++;
     chunk_offset = 0;
     bytes_written += write_size;
     chunk_id++;
@@ -199,6 +230,7 @@ uint32_t IO_Manager::process_delete_file (uint32_t request_id, uint32_t file_id)
 void IO_Manager::flush_chunks(int node_id) {
   printf("flushing chunks for node %d\n", node_id);
 
+  // TODO
   auto range = dirty_chunks.equal_range(node_id);
   for (auto it = range.first; it != range.second; it++) {
     struct file_chunk chunk = it->second;
@@ -225,24 +257,26 @@ bool IO_Manager::read_response_handler(ReadChunkResponse *read_response) {
 
   auto &viking = it->second;
   assert(viking.buffer.size() == read_response->count);
-  for (int i = 0; i < viking.buffer.size(); i++) {
+  for (size_t i = 0; i < viking.buffer.size(); i++) {
     viking.buffer[i] ^= read_response->data_buffer[i];
   }
   if (!--viking.node_count) {
     if (viking.write_to_parity) {
-      int write_result = process_write_chunk (viking.client_request_id, 0,
+      int chunk_result = process_write_chunk (viking.client_request_id, 0,
           viking.parity_chunk.file_id, viking.parity_chunk.chunk_num,
           viking.parity_chunk.stripe_id, viking.parity_chunk.chunk_num,
           viking.offset, viking.buffer.data(), viking.buffer.size());
       printf("RAID wrote parity chunk %d,%d,%d to node %d, got %d\n",
              viking.parity_chunk.file_id, viking.parity_chunk.stripe_id,
              viking.parity_chunk.chunk_num, viking.parity_chunk.chunk_num,
-             write_result);
+             chunk_result);
     }
     else {
+      // Send to client
       read_chunk_handler(viking.client_request_id, viking.client_chunk,
           new read_buffer(viking.buffer.size(), viking.buffer.data()));
     }
+    // TODO for data recovery, write primary chunk
     chunk_changes.erase(read_response->id);
   }
   return true;

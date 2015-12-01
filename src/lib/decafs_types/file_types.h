@@ -106,6 +106,10 @@ struct file_chunk {
             this->stripe_id == other.stripe_id &&
             this->chunk_num == other.chunk_num);
   }
+
+  bool operator !=(const file_chunk &other) const {
+    return !(*this == other);
+  }
   
   friend bool operator <(const file_chunk &left, const file_chunk &right) {
     if (left.file_id != right.file_id) {
