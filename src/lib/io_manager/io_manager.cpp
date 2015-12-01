@@ -130,8 +130,10 @@ void IO_Manager::process_write_stripe (uint32_t request_id,
 
     // Ensure that we have the proper node id's to send data to
     node_id = chunk_to_node[cur_chunk];
-    int parity_node_id = chunk_to_replica_node[cur_chunk];
+    int parity_node_id = put_replica(file_id, pathname, stripe_id, chunk_id);
+    struct file_chunk parity_chunk = {file_id, stripe_id, parity_node_id};
     uint32_t raid_request_id = get_new_request_id();
+    uint32_t ignore_request_id = get_new_request_id();
     int read_count = 0;
 
     // Determine the size of the write
@@ -168,9 +170,10 @@ void IO_Manager::process_write_stripe (uint32_t request_id,
 
       // Write chunk
       printf ("\tprocessing chunk %d (sending to node %d)\n", chunk_id, node_id);
-      chunk_result = process_write_chunk (request_id, 0, file_id, node_id, stripe_id,
+      chunk_result = process_write_chunk (ignore_request_id, 0, file_id, node_id, stripe_id,
                                           chunk_id, chunk_offset, (uint8_t *)buf
                                           + bytes_written, write_size);
+      ignorable_request_ids.insert(ignore_request_id);
     }
     else {
       printf("RAID updating stripe parity for chunk %d,%d,%d since node %d is DOWN\n",
@@ -194,7 +197,6 @@ void IO_Manager::process_write_stripe (uint32_t request_id,
       dirty_chunks.insert(make_pair(node_id, cur_chunk));
     }
 
-    struct file_chunk parity_chunk = {file_id, stripe_id, parity_node_id};
     chunk_changes.insert(make_pair(raid_request_id,
         ChunkViking(request_id, parity_chunk, cur_chunk, read_count,
                     chunk_offset,
@@ -256,9 +258,11 @@ bool IO_Manager::read_response_handler(ReadChunkResponse *read_response) {
   }
 
   auto &viking = it->second;
-  assert(viking.buffer.size() == read_response->count);
-  for (size_t i = 0; i < viking.buffer.size(); i++) {
-    viking.buffer[i] ^= read_response->data_buffer[i];
+  if (read_response->count > 0) {
+    assert(viking.buffer.size() == read_response->count);
+    for (size_t i = 0; i < viking.buffer.size(); i++) {
+      viking.buffer[i] ^= read_response->data_buffer[i];
+    }
   }
   if (!--viking.node_count) {
     if (viking.write_to_parity) {
