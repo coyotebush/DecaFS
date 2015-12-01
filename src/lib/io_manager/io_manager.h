@@ -43,6 +43,10 @@ class IO_Manager {
       ChunkViking(uint32_t r, struct file_chunk cc, int nc, const vector<uint8_t> &b)
         : write_to_parity(false), client_chunk(cc), client_request_id(r),
           node_count(nc), buffer(b) {}
+
+      ChunkViking(uint32_t r, struct file_chunk pc, struct file_chunk cc, int nc, int off, const vector<uint8_t> &b)
+        : write_to_parity(true), parity_chunk(pc), client_chunk(cc), client_request_id(r),
+          node_count(nc), offset(off), buffer(b) {}
     };
 
     // Variables

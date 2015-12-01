@@ -63,17 +63,18 @@ uint32_t IO_Manager::process_read_stripe (uint32_t request_id, uint32_t file_id,
       printf("RAID reconstructing chunk %d,%d,%d since node %d is DOWN\n",
              file_id, stripe_id, chunk_id, node_id);
       uint32_t raid_request_id = get_new_request_id();
-      struct file_chunk missing_chunk = {file_id, stripe_id, chunk_id};
       for (int raid_node_id = 1; raid_node_id <= get_num_espressos();
            raid_node_id++) {
+        // TODO handle missing chunks
         if (raid_node_id != node_id) {
           chunk_result = process_read_chunk(raid_request_id, 0, file_id, node_id,
                                             stripe_id, raid_node_id,
                                             chunk_offset, nullptr, read_size);
-          printf("\tRAID reading chunk %d,%d,%d from node %d\n",
-                 file_id, stripe_id, raid_node_id, raid_node_id);
+          printf("\tRAID reading chunk %d,%d,%d from node %d got %d\n",
+                 file_id, stripe_id, raid_node_id, raid_node_id, chunk_result);
         }
       }
+      struct file_chunk missing_chunk = {file_id, stripe_id, chunk_id};
       chunk_changes.insert(make_pair(raid_request_id,
           ChunkViking(request_id, missing_chunk, get_num_espressos() - 1,
                       vector<uint8_t>(read_size, 0))));
@@ -130,6 +131,10 @@ void IO_Manager::process_write_stripe (uint32_t request_id,
       printf("RAID sending chunk %d,%d,%d to node %d\n",
              file_id, stripe_id, chunk_id, node_id);
 
+      /* chunk_changes.insert(make_pair(raid_request_id, */
+      /*     ChunkViking(request_id, missing_chunk, get_num_espressos() - 1, */
+      /*                 vector<uint8_t>(read_size, 0)))); */
+
       // Send
       printf ("\tprocessing chunk %d (sending to node %d)\n", chunk_id, node_id);
       write_result = process_write_chunk (request_id, 0, file_id, node_id, stripe_id,
@@ -141,6 +146,25 @@ void IO_Manager::process_write_stripe (uint32_t request_id,
       // TODO
       printf("RAID updating rest of stripe for chunk %d,%d,%d since node %d is DOWN\n",
              file_id, stripe_id, chunk_id, node_id);
+      uint32_t raid_request_id = get_new_request_id();
+      int parity_node_id = put_replica(file_id, pathname, stripe_id, chunk_id);
+      for (int raid_node_id = 1; raid_node_id <= get_num_espressos();
+           raid_node_id++) {
+        if (raid_node_id != node_id && raid_node_id != parity_node_id) {
+          int chunk_result = process_read_chunk(raid_request_id, 0, file_id, node_id,
+                                                stripe_id, raid_node_id,
+                                                chunk_offset, nullptr, write_size);
+          printf("\tRAID reading chunk %d,%d,%d from node %d got %d\n",
+                 file_id, stripe_id, raid_node_id, raid_node_id, chunk_result);
+        }
+      }
+      struct file_chunk missing_chunk = {file_id, stripe_id, chunk_id};
+      struct file_chunk parity_chunk = {file_id, stripe_id, get_num_espressos()};
+      chunk_changes.insert(make_pair(raid_request_id,
+          ChunkViking(request_id, parity_chunk, missing_chunk, get_num_espressos() - 2,
+                      chunk_offset,
+                      vector<uint8_t>((uint8_t *)buf + bytes_written,
+                                      (uint8_t *)buf + bytes_written + write_size))));
 
       printf("\tqueueing write of chunk %d to node %d which is DOWN\n", chunk_id, node_id);
       dirty_chunks.insert(make_pair(node_id, cur_chunk));
