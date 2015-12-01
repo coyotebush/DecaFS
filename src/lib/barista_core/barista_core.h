@@ -65,19 +65,32 @@ struct read_buffer {
 
   read_buffer() : size (0), buf (NULL) {}
   read_buffer (int size, uint8_t *buf) {
+    this->size = size;
+    copy_buf(buf);
+  }
+  read_buffer(const read_buffer &other) : read_buffer(other.size, other.buf) {}
+  read_buffer &operator=(const read_buffer &other) {
+    free_buf();
+    size = other.size;
+    copy_buf(other.buf);
+    return *this;
+  }
+  ~read_buffer () {
+    free_buf();
+  }
+private:
+  void free_buf() {
+    if (size > 0) {
+      free(this->buf);
+    }
+  }
+  void copy_buf(uint8_t *buf) {
     if (size > 0) {
       this->buf = (uint8_t *)malloc(size);
       memcpy (this->buf, buf, size);
-      this->size = size;
     }
     else {
-      this->size = 0;
       this->buf = NULL;
-    }
-  }
-  ~read_buffer () {
-    if (size > 0) {
-      free(this->buf);
     }
   }
 };

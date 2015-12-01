@@ -19,6 +19,7 @@ TcpServer::TcpServer(unsigned short port) :
   setup_socket();
   m_highest_socket = m_socket_number;
 
+  FD_ZERO(&m_server_set);
   FD_SET(m_socket_number, &m_server_set);
 }
 

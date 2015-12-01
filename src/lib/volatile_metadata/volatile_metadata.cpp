@@ -43,9 +43,9 @@ uint32_t Volatile_Metadata::get_stripe_size() {
   return stripe_size;
 }
 
-int Volatile_Metadata::set_num_espressos (uint32_t num_espressos) {
+int Volatile_Metadata::set_num_espressos (uint32_t n) {
   if (num_espressos == 0) {
-    num_espressos = num_espressos;
+    num_espressos = n;
     return 1;
   }
   return SIZE_ALREADY_SET;
