@@ -257,23 +257,33 @@ uint32_t IO_Manager::process_delete_file (uint32_t request_id, uint32_t file_id)
 }
 
 void IO_Manager::flush_chunks(int node_id) {
-  printf("flushing chunks for node %d\n", node_id);
+  printf("RAID flushing chunks for node %d\n", node_id);
 
-  // TODO
   auto range = dirty_chunks.equal_range(node_id);
   for (auto it = range.first; it != range.second; it++) {
-    struct file_chunk chunk = it->second;
-    int recovery_node_id = chunk_to_node[chunk];
-    if (recovery_node_id == node_id) {
-      recovery_node_id = chunk_to_replica_node[chunk];
+    int read_count = 0;
+    struct file_chunk cur_chunk = it->second;
+    struct file_chunk raid_chunk = cur_chunk;
+    uint32_t raid_request_id = get_new_request_id();
+    uint32_t ignore_request_id = get_new_request_id();
+
+    for (raid_chunk.chunk_num = 1; raid_chunk.chunk_num <= get_num_espressos();
+         raid_chunk.chunk_num++) {
+      if (raid_chunk != cur_chunk && chunk_exists(raid_chunk)) {
+        int chunk_result = process_read_chunk(raid_request_id, 0,
+            raid_chunk.file_id, raid_chunk.chunk_num, raid_chunk.stripe_id,
+            raid_chunk.chunk_num, 0, nullptr, get_chunk_size());
+        printf("\tRAID reading chunk %d,%d,%d from node %d got %d\n",
+               raid_chunk.file_id, raid_chunk.stripe_id, raid_chunk.chunk_num,
+               raid_chunk.chunk_num, chunk_result);
+        read_count++;
+      }
     }
-    printf("  starting to copy chunk %d,%d,%d from node %d to node %d\n",
-           chunk.file_id, chunk.stripe_id, chunk.chunk_num, recovery_node_id, node_id);
-    uint32_t request_id = get_new_request_id();
-    process_read_chunk(request_id, 0, chunk.file_id, recovery_node_id,
-                       chunk.stripe_id, chunk.chunk_num, 0, nullptr,
-                       get_chunk_size());
-    read_request_ids.insert(make_pair(request_id, make_pair(node_id, chunk)));
+
+    ignorable_request_ids.insert(ignore_request_id);
+    chunk_changes.insert(make_pair(raid_request_id,
+          ChunkViking(ignore_request_id, cur_chunk, cur_chunk, read_count, 0,
+                      vector<uint8_t>(get_chunk_size(), 0))));
   }
   dirty_chunks.erase(node_id);
 }
@@ -313,7 +323,6 @@ void IO_Manager::raid_finalize(ChunkViking &viking, uint32_t request_id) {
     read_chunk_handler(viking.client_request_id, viking.client_chunk,
         new read_buffer(viking.buffer.size(), viking.buffer.data()));
   }
-  // TODO for data recovery, write primary chunk
   chunk_changes.erase(request_id);
 }
 
