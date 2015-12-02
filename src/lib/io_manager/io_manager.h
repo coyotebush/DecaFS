@@ -73,6 +73,8 @@ class IO_Manager {
     // the chunk
     void get_first_chunk (uint32_t *id, uint32_t chunk_size, int *chunk_offset, int offset);
 
+    void raid_finalize(ChunkViking &viking, uint32_t request_id);
+
   public:
     IO_Manager();
     
