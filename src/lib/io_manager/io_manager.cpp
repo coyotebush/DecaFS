@@ -152,7 +152,7 @@ void IO_Manager::process_write_stripe (uint32_t request_id,
       write_size = count - bytes_written;
     }
 
-    if (is_node_up(node_id)) {
+    if (is_node_up(node_id) && is_node_up(parity_node_id)) {
       printf("RAID sending chunk %d,%d,%d to node %d\n",
              file_id, stripe_id, chunk_id, node_id);
 
@@ -187,7 +187,18 @@ void IO_Manager::process_write_stripe (uint32_t request_id,
                                           + bytes_written, write_size);
       ignorable_request_ids.insert(ignore_request_id);
     }
+    else if (is_node_up(node_id)) {
+      // Parity is down
+      printf ("\tprocessing chunk %d (sending to node %d)\n", chunk_id, node_id);
+      chunk_result = process_write_chunk (request_id, 0, file_id, node_id, stripe_id,
+                                          chunk_id, chunk_offset, (uint8_t *)buf
+                                          + bytes_written, write_size);
+
+      printf("\tqueueing write of parity chunk %d to node %d which is DOWN\n", parity_node_id, parity_node_id);
+      dirty_chunks.insert(make_pair(parity_node_id, parity_chunk));
+    }
     else {
+      // Parity is up, primary is down
       printf("RAID updating stripe parity for chunk %d,%d,%d since node %d is DOWN\n",
              file_id, stripe_id, chunk_id, node_id);
 
