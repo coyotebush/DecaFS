@@ -21,15 +21,16 @@ int main(int argc, char** argv) {
   std::cout << "open returned: " << fd << std::endl;
   sleep(1);
 
-  // WRITE
+  // WRITE 4.5 chunks worth of data
   char *chunks[] = {
     "ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWX",
     "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwx",
-    "tHE QUICK BROWN fOX JUMPS OVER THE LAZY DOG_ tHE QUICK BROWN fOX JUMPS OVER THE LAZY DOG_ tHE QUICK BROWN fOX JUMPS OVER THE LAZ"
+    "tHE QUICK BROWN fOX JUMPS OVER THE LAZY DOG_ tHE QUICK BROWN fOX JUMPS OVER THE LAZY DOG_ tHE QUICK BROWN fOX JUMPS OVER THE LAZ",
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWX"
   };
   int bytes_written;
-  for (int i = 0; i <3; i++) {
-    bytes_written = client.write(fd, chunks[i], 128);
+  for (int i = 0; i < 4; i++) {
+    bytes_written = client.write(fd, chunks[i], strlen(chunks[i]));
     std::cout << "write returned: " << bytes_written << std::endl;
     sleep(1);
   }
@@ -64,7 +65,7 @@ int main(int argc, char** argv) {
   sleep(1);
 
   // READ
-  bytes_read = client.read(fd, testread, 384);
+  bytes_read = client.read(fd, testread, 512);
   std::cout << "read returned: " << bytes_read << std::endl;
   sleep(1);
 
@@ -77,7 +78,7 @@ int main(int argc, char** argv) {
   sleep(1);
 
   // READ
-  bytes_read = client.read(fd, testread, 384);
+  bytes_read = client.read(fd, testread, 512);
   std::cout << "read returned: " << bytes_read << std::endl;
   sleep(1);
   
